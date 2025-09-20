@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Kaleidoscope</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #controls {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+        }
+        
+        #controls button {
+            margin: 5px;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        #controls button:hover {
+            background: #45a049;
+        }
+        
+        #controls input[type="range"] {
+            width: 100px;
+            margin: 5px;
+        }
+        
+        #controls label {
+            display: block;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        
+        .info {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="saveBtn">💾 Save</button>
+        <button id="clearBtn">🧽 Clear</button>
+        <label>
+            Symmetry: <span id="symmetryValue">6</span>
+            <input type="range" id="symmetrySlider" min="2" max="20" value="6">
+        </label>
+        <label>
+            <input type="checkbox" id="trailMode"> 🌈 Trail mode
+        </label>
+        <label>
+            Brush Size: <span id="brushValue">4</span>
+            <input type="range" id="brushSlider" min="1" max="20" value="4">
+        </label>
+    </div>
+    
+    <canvas id="kaleidoscope"></canvas>
+    
+    <div class="info">
+        Click and drag to draw • Move mouse for color changes • Adjust symmetry for different patterns
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('kaleidoscope');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Variables
+        let symmetry = 6;
+        let angle = 360 / symmetry;
+        let brushSize = 4;
+        let isDrawing = false;
+        let trailMode = false;
+        
+        // UI elements
+        const saveBtn = document.getElementById('saveBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const symmetrySlider = document.getElementById('symmetrySlider');
+        const symmetryValue = document.getElementById('symmetryValue');
+        const trailModeCheckbox = document.getElementById('trailMode');
+        const brushSlider = document.getElementById('brushSlider');
+        const brushValue = document.getElementById('brushValue');
+        
+        // Event listeners
+        saveBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'kaleidoscope-art.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+        
+        symmetrySlider.addEventListener('input', (e) => {
+            symmetry = parseInt(e.target.value);
+            angle = 360 / symmetry;
+            symmetryValue.textContent = symmetry;
+        });
+        
+        trailModeCheckbox.addEventListener('change', (e) => {
+            trailMode = e.target.checked;
+        });
+        
+        brushSlider.addEventListener('input', (e) => {
+            brushSize = parseInt(e.target.value);
+            brushValue.textContent = brushSize;
+        });
+        
+        // Drawing functions
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+        
+        function drawSymmetrical(x, y, prevX, prevY) {
+            // Translate to center
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Convert to relative coordinates
+            const relX = x - centerX;
+            const relY = y - centerY;
+            const relPrevX = prevX - centerX;
+            const relPrevY = prevY - centerY;
+            
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            
+            // Color based on position and time
+            const hue = (Math.atan2(relY, relX) * 180 / Math.PI + 180 + Date.now() * 0.01) % 360;
+            const saturation = 100;
+            const lightness = 50 + Math.sin(Date.now() * 0.005) * 20;
+            
+            ctx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Draw symmetrical patterns
+            for (let i = 0; i < symmetry; i++) {
+                ctx.save();
+                ctx.rotate((angle * i) * Math.PI / 180);
+                
+                // Original
+                ctx.beginPath();
+                ctx.moveTo(relPrevX, relPrevY);
+                ctx.lineTo(relX, relY);
+                ctx.stroke();
+                
+                // Mirrored
+                ctx.save();
+                ctx.scale(1, -1);
+                ctx.beginPath();
+                ctx.moveTo(relPrevX, relPrevY);
+                ctx.lineTo(relX, relY);
+                ctx.stroke();
+                ctx.restore();
+                
+                ctx.restore();
+            }
+            
+            ctx.restore();
+        }
+        
+        // Mouse events
+        let lastPos = { x: 0, y: 0 };
+        
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastPos = pos;
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            
+            const pos = getMousePos(e);
+            
+            // Trail effect
+            if (trailMode) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            drawSymmetrical(pos.x, pos.y, lastPos.x, lastPos.y);
+            lastPos = pos;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+        });
+        
+        // Touch events for mobile
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const pos = getMousePos(touch);
+            isDrawing = true;
+            lastPos = pos;
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            
+            const touch = e.touches[0];
+            const pos = getMousePos(touch);
+            
+            if (trailMode) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            drawSymmetrical(pos.x, pos.y, lastPos.x, lastPos.y);
+            lastPos = pos;
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isDrawing = false;
+        });
+        
+        // Animation loop for ambient effects
+        function animate() {
+            if (!isDrawing && trailMode) {
+                // Subtle ambient animation when not drawing
+                const time = Date.now() * 0.001;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.globalAlpha = 0.1;
+                
+                for (let i = 0; i < symmetry; i++) {
+                    ctx.save();
+                    ctx.rotate((angle * i + time * 10) * Math.PI / 180);
+                    
+                    const x = Math.cos(time) * 50;
+                    const y = Math.sin(time * 1.5) * 30;
+                    
+                    ctx.fillStyle = `hsl(${(time * 50) % 360}, 70%, 50%)`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.restore();
+                }
+                
+                ctx.restore();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        animate();
+        
+        // Initial clear
+        clearBtn.click();
+    </script>
+</body>
+</html>
